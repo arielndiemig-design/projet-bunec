@@ -1,0 +1,22 @@
+{
+  "folders": [
+    {
+      "name": "📦 SUIVI DE DOSSIER (Racine)",
+      "path": "."
+    },
+    {
+      "name": "⚙️ Backend API (Express MVC)",
+      "path": "backend"
+    },
+    {
+      "name": "🖥️ Frontend (Portail Citoyen)",
+      "path": "frontend"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/node_modules": true,
+      "**/dist": true
+    }
+  }
+}

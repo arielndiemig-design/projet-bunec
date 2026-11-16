@@ -1,0 +1,13 @@
+{
+  "editor.tabSize": 2,
+  "editor.formatOnSave": true,
+  "files.associations": {
+    "*.sql": "postgres",
+    "*.json": "jsonc"
+  },
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.git": false
+  }
+}
