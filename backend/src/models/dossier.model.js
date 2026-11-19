@@ -1,5 +1,24 @@
-const { query, isDatabaseConfigured } = require("../config/database");
-const { dossiersHistoriqueDatabase, getDossierNotificationEmail } = require("../data/store");
+const { pool, query, isDatabaseConfigured } = require("../config/database");
+const { dossiersHistoriqueDatabase } = require("../data/store");
+const { isProduction } = require("../config/env");
+
+const adminStatusMap = {
+  INSTRUCTION: { database: "EN_INSTRUCTION", step: 2 },
+  PRETE_RETRAIT: { database: "PRET_DELIVRANCE", step: 4 },
+  REJETEE: { database: "REJETE_BLOQUE", step: 2 },
+};
+
+function invalidStatusError() {
+  const error = new Error("Le statut demandé est invalide.");
+  error.statusCode = 400;
+  return error;
+}
+
+function unavailableError() {
+  const error = new Error("Les données de démonstration sont désactivées en production.");
+  error.statusCode = 503;
+  return error;
+}
 
 const statusLabels = {
   DEPOSE: "Dossier déposé et enregistré",
@@ -12,7 +31,8 @@ const statusLabels = {
 function normalizeStatus(status) {
   if (status === "PRET_DELIVRANCE") return "PRETE_RETRAIT";
   if (status === "REJETE_BLOQUE") return "REJETEE";
-  return status === "DEPOSE" ? "INSTRUCTION" : status;
+  if (status === "EN_INSTRUCTION" || status === "DEPOSE") return "INSTRUCTION";
+  return status;
 }
 
 function toTrackingRecord(row) {
@@ -114,7 +134,7 @@ function toTrackingRecord(row) {
     statut,
     libelleStatut: statusLabels[row.statut_actuel] || statusLabels.EN_INSTRUCTION,
     etapeCourante,
-    notificationRetraitEnvoyee: isReady,
+    notificationRetraitEnvoyee: false,
     dateNotification: row.date_pret_delivrance,
     lieuRetrait: row.centre_nom,
     motifRejet: row.motif_rejet_description,
@@ -181,15 +201,6 @@ class DossierModel {
              AND (
                UPPER(BTRIM(d.numero_recepisse)) = UPPER(BTRIM($4))
                OR UPPER(BTRIM(d.bunec_tracking_id)) = UPPER(BTRIM($4))
-               OR (
-                 LENGTH(REGEXP_REPLACE($4, '[^0-9]', '', 'g')) >= 8
-                 AND REGEXP_REPLACE(d.demandeur_telephone, '[^0-9]', '', 'g')
-                   = REGEXP_REPLACE($4, '[^0-9]', '', 'g')
-               )
-               OR LOWER(BTRIM(CONCAT_WS(' ', d.demandeur_nom, d.demandeur_prenom)))
-                 = LOWER(BTRIM($4))
-               OR LOWER(BTRIM(d.demandeur_nom)) = LOWER(BTRIM($4))
-               OR LOWER(BTRIM(COALESCE(d.demandeur_email, ''))) = LOWER(BTRIM($4))
              )
            LIMIT 2`,
           [regionId, communeId, typeActe, criterion],
@@ -206,15 +217,17 @@ class DossierModel {
         if (result.rows.length === 1) {
           return toTrackingRecord(result.rows[0]);
         }
+        return null;
       } catch (err) {
         if (err.statusCode === 409) throw err;
-        console.warn("[PostgreSQL] Repli vers données en mémoire suite à l'erreur:", err.message);
+        console.error("[PostgreSQL] Échec de recherche du dossier:", err.message);
+        throw err;
       }
     }
 
-    // Repli sur la base de données en mémoire
+    if (isProduction) throw unavailableError();
+
     const critUpper = String(criterion || "").trim().toUpperCase();
-    const critDigits = String(criterion || "").replace(/\D/g, "");
 
     const found = dossiersHistoriqueDatabase.filter((d) => {
       if (regionId && d.provenance?.regionId !== regionId) return false;
@@ -223,17 +236,8 @@ class DossierModel {
 
       const numDecl = String(d.numeroDeclaration || "").toUpperCase();
       const idBunec = String(d.identifiantBUNEC || "").toUpperCase();
-      const tel = String(d.demandeur?.telephone || "").replace(/\D/g, "");
-      const nom = String(d.demandeur?.nomComplet || "").toUpperCase();
-      const email = String(getDossierNotificationEmail(d) || "").toUpperCase();
 
-      return (
-        numDecl === critUpper ||
-        idBunec === critUpper ||
-        (critDigits.length >= 8 && tel.includes(critDigits)) ||
-        nom === critUpper ||
-        email === critUpper
-      );
+      return numDecl === critUpper || idBunec === critUpper;
     });
 
     if (found.length > 1) {
@@ -259,19 +263,134 @@ class DossierModel {
   }
 
   static async getAllHistorique() {
+    if (isDatabaseConfigured()) {
+      const result = await query(
+        `SELECT
+           d.id,
+           d.bunec_tracking_id,
+           d.numero_recepisse,
+           d.type_acte::text AS type_acte,
+           d.demandeur_nom,
+           d.demandeur_prenom,
+           d.demandeur_telephone,
+           d.demandeur_email,
+           d.statut_actuel::text AS statut_actuel,
+           d.etape_cycle_vie,
+           d.motif_rejet_code,
+           d.motif_rejet_description,
+           d.officier_instructeur_nom,
+           d.date_signature_officier,
+           d.date_depot,
+           d.date_pret_delivrance,
+           r.id AS region_id,
+           r.nom AS region_nom,
+           c.id AS commune_id,
+           c.nom AS commune_nom,
+           ce.nom AS centre_nom,
+           COALESCE((
+             SELECT jsonb_agg(jsonb_build_object(
+               'etape', h.etape_cycle_vie,
+               'motif', h.motif_changement,
+               'date', h.created_at
+             ) ORDER BY h.created_at DESC)
+             FROM historique_statuts h
+             WHERE h.dossier_id = d.id
+           ), '[]'::jsonb) AS historique
+         FROM dossiers_suivi d
+         JOIN regions r ON r.id = d.region_id
+         JOIN communes c ON c.id = d.commune_id
+         JOIN centres_etat_civil ce ON ce.id = d.centre_id
+         ORDER BY d.date_depot DESC`,
+      );
+      return result.rows.map(toTrackingRecord);
+    }
+    if (isProduction) throw unavailableError();
     return dossiersHistoriqueDatabase;
   }
 
-  static async updateStatut(dossierId, nouveauStatut, motif = null) {
+  static async updateStatut(dossierId, nouveauStatut, motif = null, actor = null) {
+    const status = adminStatusMap[nouveauStatut];
+    if (!status) throw invalidStatusError();
+    if (nouveauStatut === "REJETEE" && !String(motif || "").trim()) {
+      const error = new Error("Un motif est obligatoire pour rejeter un dossier.");
+      error.statusCode = 400;
+      throw error;
+    }
+    const safeMotif = String(motif || "").trim().slice(0, 1000) || null;
+
+    if (isDatabaseConfigured()) {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const found = await client.query(
+          `SELECT id, statut_actuel::text AS statut_actuel
+           FROM dossiers_suivi
+           WHERE id::text = $1 OR bunec_tracking_id = $1 OR numero_recepisse = $1
+           FOR UPDATE`,
+          [dossierId],
+        );
+        if (found.rows.length === 0) {
+          await client.query("ROLLBACK");
+          return null;
+        }
+
+        const current = found.rows[0];
+        await client.query(
+          `UPDATE dossiers_suivi
+           SET statut_actuel = $2::statut_dossier_etat,
+               etape_cycle_vie = $3,
+               motif_rejet_code = CASE WHEN $2 = 'REJETE_BLOQUE' THEN 'REJET_ADMIN' ELSE NULL END,
+               motif_rejet_description = CASE WHEN $2 = 'REJETE_BLOQUE' THEN $4 ELSE NULL END,
+               date_pret_delivrance = CASE
+                 WHEN $2 = 'PRET_DELIVRANCE' THEN COALESCE(date_pret_delivrance, CURRENT_TIMESTAMP)
+                 ELSE NULL
+               END
+           WHERE id = $1`,
+          [current.id, status.database, status.step, safeMotif],
+        );
+        await client.query(
+          `INSERT INTO historique_statuts (
+             dossier_id, statut_precedent, statut_nouveau, etape_cycle_vie,
+             agent_matricule, agent_nom, motif_changement
+           ) VALUES ($1, $2::statut_dossier_etat, $3::statut_dossier_etat,
+                     $4, $5, $6, $7)`,
+          [
+            current.id,
+            current.statut_actuel,
+            status.database,
+            status.step,
+            String(actor?.u || "admin").slice(0, 50),
+            String(actor?.u || "Administrateur").slice(0, 150),
+            safeMotif,
+          ],
+        );
+        await client.query("COMMIT");
+        return {
+          id: current.id,
+          statut: nouveauStatut,
+          libelleStatut: statusLabels[status.database],
+          etapeCourante: status.step,
+          motifRejet: nouveauStatut === "REJETEE" ? safeMotif : null,
+        };
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        console.error("[PostgreSQL] Échec de mise à jour du dossier:", error.message);
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+    if (isProduction) throw unavailableError();
+
     const item = await this.findById(dossierId);
     if (!item) return null;
 
-    item.statut = nouveauStatut || item.statut;
+    item.statut = nouveauStatut;
     if (nouveauStatut === "PRETE_RETRAIT") {
       item.libelleStatut =
         "Disponible au guichet — Prêt pour délivrance (BAT Émis)";
       item.etapeCourante = 4;
-      item.notificationRetraitEnvoyee = true;
+      item.notificationRetraitEnvoyee = false;
       item.dateNotification = new Date().toISOString();
       if (item.cycleDeVie) {
         item.cycleDeVie.etapeCourante = 4;

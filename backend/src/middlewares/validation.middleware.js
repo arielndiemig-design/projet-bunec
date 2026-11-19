@@ -28,7 +28,16 @@ const allowedActTypes = new Set([
 function validateTrackingSearch(req, res, next) {
   const { regionId, communeId, typeActe, criterion } = req.body || {};
 
-  if (!regionId || !communeId || !typeActe || !criterion) {
+  if (
+    typeof regionId !== "string" ||
+    typeof communeId !== "string" ||
+    typeof typeActe !== "string" ||
+    typeof criterion !== "string" ||
+    !regionId.trim() ||
+    !communeId.trim() ||
+    !typeActe.trim() ||
+    !criterion.trim()
+  ) {
     return res.status(400).json({
       success: false,
       error: "Le centre, le type d’acte et une information d’identification sont obligatoires.",
@@ -42,11 +51,24 @@ function validateTrackingSearch(req, res, next) {
     });
   }
 
+  const normalizedCriterion = stripSensitiveText(criterion);
+  if (
+    normalizedCriterion.length < 7 ||
+    normalizedCriterion.length > 64 ||
+    !/[A-Za-z/-]/.test(normalizedCriterion) ||
+    !/^[A-Za-z0-9./_-]+$/.test(normalizedCriterion)
+  ) {
+    return res.status(400).json({
+      success: false,
+      error: "Utilisez le numéro de récépissé ou l’identifiant BUNEC exact.",
+    });
+  }
+
   req.sanitizedSearch = {
     regionId: stripSensitiveText(regionId),
     communeId: stripSensitiveText(communeId),
     typeActe: stripSensitiveText(typeActe),
-    criterion: stripSensitiveText(criterion),
+    criterion: normalizedCriterion,
   };
 
   next();

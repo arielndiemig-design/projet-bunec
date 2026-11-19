@@ -1,12 +1,6 @@
-const crypto = require("node:crypto");
 const { isProduction } = require("../config/env");
 
 const CSRF_COOKIE_NAME = "bunec_csrf";
-const csrfTokens = new Map();
-
-function issueCsrfToken() {
-  return crypto.randomBytes(24).toString("hex");
-}
 
 function appendCookie(res, cookieStr) {
   const existing = res.getHeader("Set-Cookie");
@@ -30,14 +24,24 @@ function setCsrfCookie(res, token) {
   appendCookie(res, flags.join("; "));
 }
 
+function clearCsrfCookie(res) {
+  const flags = [
+    `${CSRF_COOKIE_NAME}=`,
+    "Path=/",
+    "SameSite=Strict",
+    "Max-Age=0",
+  ];
+  if (isProduction) flags.push("Secure");
+  appendCookie(res, flags.join("; "));
+}
+
 function ensureCsrf(req, res, next) {
   const tokenHeader =
     req.headers["x-csrf-token"] ||
     req.headers["x-xsrf-token"] ||
     req.body?._csrf;
 
-  const username = req.session?.u;
-  const expectedToken = username ? csrfTokens.get(username) : null;
+  const expectedToken = req.session?.csrf;
 
   if (!tokenHeader || !expectedToken || tokenHeader !== expectedToken) {
     return res.status(403).json({
@@ -50,8 +54,7 @@ function ensureCsrf(req, res, next) {
 }
 
 module.exports = {
-  csrfTokens,
-  issueCsrfToken,
   setCsrfCookie,
+  clearCsrfCookie,
   ensureCsrf,
 };

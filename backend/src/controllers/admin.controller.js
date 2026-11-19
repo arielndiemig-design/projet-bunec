@@ -4,7 +4,7 @@ class AdminController {
   static async login(req, res, next) {
     try {
       const { username, password } = req.body || {};
-      const result = AuthService.login(req, res, { username, password });
+      const result = await AuthService.login(req, res, { username, password });
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -13,7 +13,7 @@ class AdminController {
 
   static async logout(req, res, next) {
     try {
-      const result = AuthService.logout(res);
+      const result = await AuthService.logout(req, res);
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -33,7 +33,12 @@ class AdminController {
     try {
       const { dossierId } = req.params;
       const { nouveauStatut, motif } = req.body || {};
-      const result = await AuthService.updateDossierStatut(dossierId, nouveauStatut, motif);
+      const result = await AuthService.updateDossierStatut(
+        dossierId,
+        nouveauStatut,
+        motif,
+        req.session,
+      );
       res.status(200).json(result);
     } catch (err) {
       next(err);

@@ -9,11 +9,13 @@ const {
   issueSession,
   setSessionCookie,
   clearSessionCookie,
+  verifySession,
+  registerSession,
+  revokeSession,
 } = require("../middlewares/auth.middleware");
 const {
-  csrfTokens,
-  issueCsrfToken,
   setCsrfCookie,
+  clearCsrfCookie,
 } = require("../middlewares/csrf.middleware");
 const {
   maskPhoneNumber,
@@ -25,33 +27,33 @@ const loginAttemptStore = new Map();
 
 class AuthService {
   static validateAdminCredentials(username, password) {
-    if (!username || !password) return false;
-    const isUserValid =
-      username === ADMIN_USERNAME ||
-      username.toLowerCase() === "bunec" ||
-      username.toLowerCase() === "admin";
-    if (!isUserValid) return false;
-
-    // Vérification par hash PBKDF2 configuré
-    try {
-      const hash = deriveAdminPasswordHash(password, ADMIN_PASSWORD_SALT);
-      const hashBuffer = Buffer.from(hash, "utf8");
-      const expectedBuffer = Buffer.from(ADMIN_PASSWORD_HASH, "utf8");
-      if (
-        hashBuffer.length === expectedBuffer.length &&
-        crypto.timingSafeEqual(hashBuffer, expectedBuffer)
-      ) {
-        return true;
-      }
-    } catch {
-      // Ignorer l'erreur de timingSafeEqual
+    if (
+      typeof username !== "string" ||
+      typeof password !== "string" ||
+      !ADMIN_PASSWORD_SALT ||
+      !/^[a-f0-9]{64}$/i.test(ADMIN_PASSWORD_HASH || "")
+    ) {
+      return false;
     }
+    if (username !== ADMIN_USERNAME) return false;
 
-    // Identifiants institutionnels de repli documentés dans le portail
-    return password === "333669" || password === "bunec123";
+    const actualHash = Buffer.from(
+      deriveAdminPasswordHash(password, ADMIN_PASSWORD_SALT),
+      "hex",
+    );
+    const expectedHash = Buffer.from(ADMIN_PASSWORD_HASH, "hex");
+    return (
+      actualHash.length === expectedHash.length &&
+      crypto.timingSafeEqual(actualHash, expectedHash)
+    );
   }
 
-  static login(req, res, { username, password }) {
+  static async login(req, res, { username, password }) {
+    if (!ADMIN_PASSWORD_SALT || !ADMIN_PASSWORD_HASH) {
+      const error = new Error("L’authentification administrateur n’est pas configurée.");
+      error.statusCode = 503;
+      throw error;
+    }
     const ip = req.ip || req.socket.remoteAddress || "unknown";
     const attempts = loginAttemptStore.get(ip) || { count: 0, firstSeen: Date.now() };
 
@@ -63,6 +65,17 @@ class AuthService {
     const isValid = this.validateAdminCredentials(username, password);
 
     if (!isValid) {
+      if (!loginAttemptStore.has(ip) && loginAttemptStore.size >= 10000) {
+        const now = Date.now();
+        for (const [key, value] of loginAttemptStore) {
+          if (now - value.firstSeen > 15 * 60 * 1000) loginAttemptStore.delete(key);
+        }
+        if (loginAttemptStore.size >= 10000) {
+          const error = new Error("Trop de tentatives. Réessayez plus tard.");
+          error.statusCode = 429;
+          throw error;
+        }
+      }
       attempts.count += 1;
       loginAttemptStore.set(ip, attempts);
       if (attempts.count >= 5) {
@@ -77,13 +90,13 @@ class AuthService {
 
     loginAttemptStore.delete(ip);
 
-    const sessionUser = username.toLowerCase() === "bunec" ? "bunec" : ADMIN_USERNAME;
+    const sessionUser = ADMIN_USERNAME;
     const sessionToken = issueSession(sessionUser);
-    const csrfToken = issueCsrfToken();
-    csrfTokens.set(sessionUser, csrfToken);
+    const session = verifySession(sessionToken);
+    await registerSession(session);
 
     setSessionCookie(res, sessionToken);
-    setCsrfCookie(res, csrfToken);
+    setCsrfCookie(res, session.csrf);
 
     return {
       success: true,
@@ -94,13 +107,14 @@ class AuthService {
         nomComplet: "Officier Supérieur Central BUNEC",
         direction: "Direction Générale - Inspection & Registre National",
       },
-      csrfToken,
+      csrfToken: session.csrf,
     };
   }
 
-  static logout(res) {
+  static async logout(req, res) {
+    await revokeSession(req.session);
     clearSessionCookie(res);
-    csrfTokens.delete(ADMIN_USERNAME);
+    clearCsrfCookie(res);
     return { success: true, message: "Déconnexion réussie." };
   }
 
@@ -117,6 +131,7 @@ class AuthService {
           ...d.demandeur,
           telephone: maskPhoneNumber(d.demandeur?.telephone),
           cni: maskIdentifier(d.demandeur?.cni),
+          email: maskEmail(d.demandeur?.email),
         },
         provenance: {
           ...d.provenance,
@@ -126,8 +141,13 @@ class AuthService {
     };
   }
 
-  static async updateDossierStatut(dossierId, nouveauStatut, motif) {
-    const item = await DossierModel.updateStatut(dossierId, nouveauStatut, motif);
+  static async updateDossierStatut(dossierId, nouveauStatut, motif, actor) {
+    const item = await DossierModel.updateStatut(
+      dossierId,
+      nouveauStatut,
+      motif,
+      actor,
+    );
     if (!item) {
       const error = new Error("Dossier introuvable.");
       error.statusCode = 404;
@@ -140,6 +160,13 @@ class AuthService {
       dossier: item,
     };
   }
+}
+
+function maskEmail(value) {
+  const email = String(value || "");
+  const [name, domain] = email.split("@");
+  if (!name || !domain) return null;
+  return `${name.slice(0, 1)}•••@${domain}`;
 }
 
 module.exports = AuthService;

@@ -10,6 +10,24 @@
       let adminCsrfToken = sessionStorage.getItem("bunec_csrf_token") || "";
       let dossiersHistoriqueAdmin = [];
 
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (character) => {
+          const entities = {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          };
+          return entities[character];
+        });
+      }
+
+      function safeInlineId(value) {
+        const id = String(value ?? "");
+        return /^[A-Za-z0-9_-]{1,80}$/.test(id) ? id : "";
+      }
+
       let filtreTypeActeActif = "TOUS";
       let dossierActuellementCorrespondant = null;
       let signalementsBat = JSON.parse(
@@ -1078,7 +1096,7 @@
         if (resultats.length === 0) {
           dropdown.innerHTML = `
           <div class="p-4 text-center text-xs text-slate-500 font-bold">
-            <span>Aucun centre d'état civil trouvé pour "<strong>${val}</strong>" parmi les 360 mairies.</span>
+            <span>Aucun centre d'état civil trouvé pour "<strong>${escapeHtml(val)}</strong>" parmi les 360 mairies.</span>
           </div>
         `;
           dropdown.classList.remove("hidden");
@@ -1090,17 +1108,17 @@
           .map(
             (c) => `
         <div
-          onclick="selectionnerCEC('${c.id}')"
+          onclick="selectionnerCEC('${safeInlineId(c.id)}')"
           class="p-3 hover:bg-emerald-50 active:bg-emerald-100 cursor-pointer border-b border-slate-100 flex items-center justify-between transition group"
         >
           <div>
             <div class="font-black text-slate-900 text-xs sm:text-sm group-hover:text-emerald-900">
-              ${c.nomCentre}
+              ${escapeHtml(c.nomCentre)}
             </div>
             <div class="text-[11px] text-emerald-800 font-bold mt-0.5 flex items-center gap-1.5 flex-wrap">
-              <span>Région : <strong>${c.regionNom}</strong></span>
-              ${c.departement ? `<span>• Dépt : <strong>${c.departement}</strong></span>` : ""}
-              <span>• Réf. <strong class="font-mono text-[10px]">${c.communeId}</strong></span>
+              <span>Région : <strong>${escapeHtml(c.regionNom)}</strong></span>
+              ${c.departement ? `<span>• Dépt : <strong>${escapeHtml(c.departement)}</strong></span>` : ""}
+              <span>• Réf. <strong class="font-mono text-[10px]">${escapeHtml(c.communeId)}</strong></span>
             </div>
           </div>
           <span class="text-[11px] font-black text-emerald-800 bg-emerald-100 group-hover:bg-emerald-200 px-2.5 py-1 rounded-lg">
@@ -1310,7 +1328,12 @@
         const toast = document.createElement("div");
         toast.className =
           "fixed bottom-5 right-5 z-50 p-4 rounded-2xl shadow-2xl border text-xs bg-slate-900 text-white flex items-center gap-3 border-emerald-400 max-w-md animate-[fadeIn_0.2s_ease-in-out]";
-        toast.innerHTML = `<span class="text-base text-emerald-400">✓</span><span>${msg}</span>`;
+        const icon = document.createElement("span");
+        icon.className = "text-base text-emerald-400";
+        icon.textContent = "✓";
+        const message = document.createElement("span");
+        message.textContent = String(msg ?? "");
+        toast.append(icon, message);
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 4000);
       }
@@ -1644,13 +1667,13 @@
                 <span class="text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-slate-950 px-2 py-0.5 rounded font-mono">
                   TYPE D'ACTE IDENTIFIÉ
                 </span>
-                <span class="text-xs text-emerald-300 font-bold">• ${typeActeDetecte.registre}</span>
+                <span class="text-xs text-emerald-300 font-bold">• ${escapeHtml(typeActeDetecte.registre)}</span>
               </div>
               <h3 class="text-xl sm:text-2xl font-black tracking-tight text-white mt-1 uppercase">
-                ${typeActeDetecte.titre}
+                ${escapeHtml(typeActeDetecte.titre)}
               </h3>
               <p class="text-xs text-slate-300 mt-0.5 font-medium">
-                ${typeActeDetecte.description}
+                ${escapeHtml(typeActeDetecte.description)}
               </p>
             </div>
           </div>
@@ -1658,7 +1681,7 @@
           <div class="flex flex-wrap items-center gap-3">
             <div class="hidden bg-white/10 p-2.5 sm:p-3 rounded-2xl border border-white/10 text-xs">
               <span class="text-slate-400 block text-[10px] uppercase font-bold">Canaux Détectés :</span>
-              <span class="font-bold text-amber-300">📱 +237 ${telAffiche}</span>
+              <span class="font-bold text-amber-300">📱 +237 ${escapeHtml(telAffiche)}</span>
               <div class="flex items-center gap-1.5 mt-1">
                 ${messagerieDetectee.whatsapp ? '<span class="bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1">💬 WhatsApp ✓</span>' : ""}
                 ${messagerieDetectee.telegram ? '<span class="bg-sky-500/30 text-sky-200 border border-sky-400/40 text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1">✈️ Telegram ✓</span>' : ""}
@@ -1892,22 +1915,22 @@
               <div>
                 <div class="flex items-center gap-2 mb-1">
                   <span class="text-xs uppercase tracking-widest font-black text-slate-500">N° DÉCLARATION :</span>
-                  <span class="font-mono text-xs bg-white/90 px-2.5 py-0.5 rounded font-black text-slate-800 border border-slate-300">${numDecFinal}</span>
+                  <span class="font-mono text-xs bg-white/90 px-2.5 py-0.5 rounded font-black text-slate-800 border border-slate-300">${escapeHtml(numDecFinal)}</span>
                 </div>
                 <h4 class="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
-                  ${idBunecFinal}
+                  ${escapeHtml(idBunecFinal)}
                 </h4>
                 <p class="text-xs font-semibold text-slate-600 mt-1">
-                  ${centreFinal}
+                  ${escapeHtml(centreFinal)}
                 </p>
               </div>
 
               <div class="flex flex-col items-start md:items-end gap-2">
                 <span class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-black border ${badgeClass}">
                   <span class="w-2.5 h-2.5 rounded-full ${cycleDeVie.codeCouleur === "green" ? "bg-emerald-500 animate-pulse" : cycleDeVie.codeCouleur === "amber" ? "bg-amber-500 animate-pulse" : "bg-rose-500"}"></span>
-                  ${cycleDeVie.libelleStatut}
+                  ${escapeHtml(cycleDeVie.libelleStatut)}
                 </span>
-                <span class="text-xs text-slate-600">Demandeur : <strong>${typeActeDetecte.demandeur}</strong></span>
+                <span class="text-xs text-slate-600">Demandeur : <strong>${escapeHtml(typeActeDetecte.demandeur)}</strong></span>
               </div>
             </div>
 
@@ -1917,8 +1940,8 @@
               <div class="mt-5 p-4 rounded-2xl bg-rose-100/90 border border-rose-300 text-rose-950 text-sm flex items-start gap-3">
                 <span class="text-2xl">⚠️</span>
                 <div>
-                  <p class="font-black text-rose-950">Motif officiel du rejet : ${cycleDeVie.motifBlocage.libelle}</p>
-                  <p class="text-xs text-rose-900 mt-0.5 font-medium">${cycleDeVie.motifBlocage.description}</p>
+                  <p class="font-black text-rose-950">Motif officiel du rejet : ${escapeHtml(cycleDeVie.motifBlocage.libelle)}</p>
+                  <p class="text-xs text-rose-900 mt-0.5 font-medium">${escapeHtml(cycleDeVie.motifBlocage.description)}</p>
                   <p class="text-[11px] font-black uppercase text-rose-900 mt-2 bg-rose-200/80 px-2 py-1 rounded inline-block">
                     Action requise : Présentez-vous muni de la CNI originale et du certificat médical au guichet n°02.
                   </p>
@@ -1962,15 +1985,15 @@
                     <div class="flex-shrink-0 pt-0.5">${iconHtml}</div>
                     <div class="flex-grow p-4 sm:p-5 rounded-2xl border ${boxClass}">
                       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
-                        <span class="font-extrabold text-sm text-slate-900">Étape ${etape.numero} : ${etape.nom}</span>
-                        ${etape.date ? `<span class="text-xs font-mono font-bold text-slate-500">${etape.date}</span>` : ""}
+                        <span class="font-extrabold text-sm text-slate-900">Étape ${escapeHtml(etape.numero)} : ${escapeHtml(etape.nom)}</span>
+                        ${etape.date ? `<span class="text-xs font-mono font-bold text-slate-500">${escapeHtml(etape.date)}</span>` : ""}
                       </div>
-                      <p class="text-xs text-slate-600 mt-0.5">${etape.desc}</p>
+                      <p class="text-xs text-slate-600 mt-0.5">${escapeHtml(etape.desc)}</p>
                       ${
                         etape.convocation
                           ? `
                         <div class="mt-3 p-3 bg-emerald-100/80 border border-emerald-300 rounded-xl text-xs font-black text-emerald-950">
-                          📅 ${etape.convocation}
+                          📅 ${escapeHtml(etape.convocation)}
                         </div>
                       `
                           : ""
@@ -1992,7 +2015,7 @@
                   messagerieDetectee.whatsapp
                     ? `
                   <button type="button" onclick="testerAlerteMessagerie('WhatsApp')" title="Tester la notification WhatsApp" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer">
-                    <span>💬 WhatsApp (+237 ${telephoneSuivi})</span>
+                    <span>💬 WhatsApp (+237 ${escapeHtml(telephoneSuivi)})</span>
                     <span class="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded-full font-black">✓ Actif</span>
                   </button>
                 `
@@ -2148,11 +2171,12 @@
                   ? "Monogamie — Séparation"
                   : "Polygamie";
 
+            const banId = safeInlineId(ban.id);
             return `
           <div class="bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden flex flex-col justify-between hover:shadow-xl transition">
             <div class="p-4 sm:p-5">
               <div class="flex items-center justify-between gap-2 mb-3">
-                <span class="font-mono text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">${ban.referenceLegaleBan}</span>
+                <span class="font-mono text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">${escapeHtml(ban.referenceLegaleBan)}</span>
                 ${badgeBadge}
               </div>
 
@@ -2174,29 +2198,29 @@
                   <!-- Époux -->
                   <div class="flex flex-col items-center text-center p-2 sm:p-2.5 rounded-xl bg-white/90 border border-blue-200 shadow-2xs hover:border-blue-400 transition">
                     <h4 class="font-black text-slate-900 text-xs sm:text-sm leading-snug line-clamp-1">
-                      ${ban.epoux.nom}
+                      ${escapeHtml(ban.epoux.nom)}
                     </h4>
                     <p class="text-[11px] font-bold text-blue-950 leading-tight line-clamp-1">
-                      ${ban.epoux.prenom}
+                      ${escapeHtml(ban.epoux.prenom)}
                     </p>
                     <p class="text-[10px] text-slate-600 mt-0.5 leading-tight line-clamp-1">
-                      ${ban.epoux.profession}
+                      ${escapeHtml(ban.epoux.profession)}
                     </p>
-                    <span class="text-[9px] text-slate-400 mt-0.5 line-clamp-1">Né à ${ban.epoux.lieuNaissance}</span>
+                    <span class="text-[9px] text-slate-400 mt-0.5 line-clamp-1">Né à ${escapeHtml(ban.epoux.lieuNaissance)}</span>
                   </div>
 
                   <!-- Épouse -->
                   <div class="flex flex-col items-center text-center p-2 sm:p-2.5 rounded-xl bg-white/90 border border-rose-200 shadow-2xs hover:border-rose-400 transition">
                     <h4 class="font-black text-slate-900 text-xs sm:text-sm leading-snug line-clamp-1">
-                      ${ban.epouse.nom}
+                      ${escapeHtml(ban.epouse.nom)}
                     </h4>
                     <p class="text-[11px] font-bold text-rose-950 leading-tight line-clamp-1">
-                      ${ban.epouse.prenom}
+                      ${escapeHtml(ban.epouse.prenom)}
                     </p>
                     <p class="text-[10px] text-slate-600 mt-0.5 leading-tight line-clamp-1">
-                      ${ban.epouse.profession}
+                      ${escapeHtml(ban.epouse.profession)}
                     </p>
-                    <span class="text-[9px] text-slate-400 mt-0.5 line-clamp-1">Née à ${ban.epouse.lieuNaissance}</span>
+                    <span class="text-[9px] text-slate-400 mt-0.5 line-clamp-1">Née à ${escapeHtml(ban.epouse.lieuNaissance)}</span>
                   </div>
                 </div>
               </div>
@@ -2205,7 +2229,7 @@
               <div class="pt-2 border-t border-slate-100 space-y-1.5 text-xs text-slate-700">
                 <div class="flex items-start gap-1.5">
                   <span class="font-black text-slate-900 whitespace-nowrap">Lieu de célébration :</span>
-                  <span class="text-slate-600 font-medium">${ban.lieuPrevuCelebration}</span>
+                  <span class="text-slate-600 font-medium">${escapeHtml(ban.lieuPrevuCelebration)}</span>
                 </div>
                 <div class="flex items-start gap-1.5">
                   <span class="font-black text-slate-900 whitespace-nowrap">Régime :</span>
@@ -2217,16 +2241,16 @@
             <div class="p-4 sm:p-5 bg-slate-50 border-t border-slate-200">
               <div class="flex items-center justify-between mb-3">
                 <span class="text-[11px] font-black text-slate-500 uppercase">Délai Légal :</span>
-                <div class="countdown-badge font-mono text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-sm" data-target="${ban.dateFinAffichage}">
+                <div class="countdown-badge font-mono text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-sm" data-target="${escapeHtml(ban.dateFinAffichage)}">
                   Calcul...
                 </div>
               </div>
 
               <div class="grid grid-cols-2 gap-2">
-                <button type="button" onclick="ouvrirDetailBan('${ban.id}')" class="w-full py-2.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 rounded-xl text-xs font-black transition">
+                <button type="button" onclick="ouvrirDetailBan('${banId}')" class="w-full py-2.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 rounded-xl text-xs font-black transition">
                   Fiche Complète
                 </button>
-                <button type="button" onclick="ouvrirFormOpposition('${ban.id}')" ${ban.statutBan === "CLOTURE_SANS_OPPOSITION" ? "disabled" : ""} class="w-full py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-black transition disabled:opacity-40">
+                <button type="button" onclick="ouvrirFormOpposition('${banId}')" ${ban.statutBan === "CLOTURE_SANS_OPPOSITION" ? "disabled" : ""} class="w-full py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-black transition disabled:opacity-40">
                   Former Opposition
                 </button>
               </div>
@@ -2262,10 +2286,10 @@
 
         document.getElementById("modal-ban-detail-content").innerHTML = `
         <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div><span class="text-slate-500 font-bold">Référence BUNEC :</span> <strong class="font-mono text-slate-900">${ban.referenceLegaleBan}</strong></div>
-          <div><span class="text-slate-500 font-bold">Centre d'état civil :</span> <strong class="text-slate-900">${ban.centreEtatCivil}</strong></div>
-          <div><span class="text-slate-500 font-bold">Période légale :</span> <strong class="text-slate-900">${ban.dateDebutAffichage} au ${ban.dateFinAffichage.split("T")[0]}</strong></div>
-          <div><span class="text-slate-500 font-bold">Date célébration :</span> <strong class="text-slate-900">${ban.datePrevueCelebration}</strong></div>
+          <div><span class="text-slate-500 font-bold">Référence BUNEC :</span> <strong class="font-mono text-slate-900">${escapeHtml(ban.referenceLegaleBan)}</strong></div>
+          <div><span class="text-slate-500 font-bold">Centre d'état civil :</span> <strong class="text-slate-900">${escapeHtml(ban.centreEtatCivil)}</strong></div>
+          <div><span class="text-slate-500 font-bold">Période légale :</span> <strong class="text-slate-900">${escapeHtml(ban.dateDebutAffichage)} au ${escapeHtml(ban.dateFinAffichage.split("T")[0])}</strong></div>
+          <div><span class="text-slate-500 font-bold">Date célébration :</span> <strong class="text-slate-900">${escapeHtml(ban.datePrevueCelebration)}</strong></div>
         </div>
 
         <!-- PORTRAITS RÉELS & FICHES D'IDENTITÉ CIVILE -->
@@ -2278,16 +2302,16 @@
                   FUTUR ÉPOUX
                 </span>
                 <h5 class="font-black text-slate-900 text-sm sm:text-base leading-tight">
-                  ${ban.epoux.nom} ${ban.epoux.prenom}
+                  ${escapeHtml(ban.epoux.nom)} ${escapeHtml(ban.epoux.prenom)}
                 </h5>
-                <p class="text-xs text-blue-900 font-bold mt-0.5">${ban.epoux.profession}</p>
-                <p class="text-[11px] text-slate-500 mt-0.5">Né le ${ban.epoux.dateNaissance} à ${ban.epoux.lieuNaissance}</p>
+                <p class="text-xs text-blue-900 font-bold mt-0.5">${escapeHtml(ban.epoux.profession)}</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Né le ${escapeHtml(ban.epoux.dateNaissance)} à ${escapeHtml(ban.epoux.lieuNaissance)}</p>
               </div>
             </div>
             <div class="space-y-1.5 text-slate-700 text-xs">
-              <p><strong>Domicile :</strong> ${ban.epoux.domicile}</p>
-              <p><strong>Fils de :</strong> ${ban.epoux.pere}</p>
-              <p><strong>Et de :</strong> ${ban.epoux.mere}</p>
+              <p><strong>Domicile :</strong> ${escapeHtml(ban.epoux.domicile)}</p>
+              <p><strong>Fils de :</strong> ${escapeHtml(ban.epoux.pere)}</p>
+              <p><strong>Et de :</strong> ${escapeHtml(ban.epoux.mere)}</p>
             </div>
           </div>
 
@@ -2299,22 +2323,22 @@
                   FUTURE ÉPOUSE
                 </span>
                 <h5 class="font-black text-slate-900 text-sm sm:text-base leading-tight">
-                  ${ban.epouse.nom} ${ban.epouse.prenom}
+                  ${escapeHtml(ban.epouse.nom)} ${escapeHtml(ban.epouse.prenom)}
                 </h5>
-                <p class="text-xs text-rose-900 font-bold mt-0.5">${ban.epouse.profession}</p>
-                <p class="text-[11px] text-slate-500 mt-0.5">Née le ${ban.epouse.dateNaissance} à ${ban.epouse.lieuNaissance}</p>
+                <p class="text-xs text-rose-900 font-bold mt-0.5">${escapeHtml(ban.epouse.profession)}</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Née le ${escapeHtml(ban.epouse.dateNaissance)} à ${escapeHtml(ban.epouse.lieuNaissance)}</p>
               </div>
             </div>
             <div class="space-y-1.5 text-slate-700 text-xs">
-              <p><strong>Domicile :</strong> ${ban.epouse.domicile}</p>
-              <p><strong>Fille de :</strong> ${ban.epouse.pere}</p>
-              <p><strong>Et de :</strong> ${ban.epouse.mere}</p>
+              <p><strong>Domicile :</strong> ${escapeHtml(ban.epouse.domicile)}</p>
+              <p><strong>Fille de :</strong> ${escapeHtml(ban.epouse.pere)}</p>
+              <p><strong>Et de :</strong> ${escapeHtml(ban.epouse.mere)}</p>
             </div>
           </div>
         </div>
 
         <div class="p-3 bg-slate-100 rounded-xl text-[11px] font-mono text-slate-600 break-all">
-          Empreinte SHA-256 certifiée BUNEC : ${ban.hashCertifieSha256}
+          Empreinte SHA-256 certifiée BUNEC : ${escapeHtml(ban.hashCertifieSha256)}
         </div>
       `;
 
@@ -2365,6 +2389,9 @@
             }),
           });
           const result = await res.json();
+          if (!res.ok) {
+            throw new Error(result.error || "L’opposition n’a pas pu être enregistrée.");
+          }
           if (ban) ban.statutBan = "OPPOSITION_ENREGISTREE";
           fermerModal("modal-opposition");
           filtrerBans();
@@ -2373,12 +2400,7 @@
               "Opposition formelle enregistrée avec horodatage certifié SHA-256 et transmise au Procureur de la République.",
           );
         } catch (err) {
-          if (ban) ban.statutBan = "OPPOSITION_ENREGISTREE";
-          fermerModal("modal-opposition");
-          filtrerBans();
-          alert(
-            "Opposition formelle enregistrée avec horodatage certifié SHA-256 et transmise au Procureur de la République.",
-          );
+          alert(err.message || "Le service d’opposition est indisponible.");
         }
       }
 
@@ -3417,7 +3439,22 @@
         }
       }
 
-      function deconnexionAdmin() {
+      async function deconnexionAdmin() {
+        try {
+          const response = await fetch("/api/v1/auth/logout", {
+            method: "POST",
+            headers: { "X-CSRF-Token": adminCsrfToken },
+          });
+          if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            alert(result.error || "La déconnexion sécurisée a échoué.");
+            return;
+          }
+        } catch {
+          alert("Le serveur n’a pas confirmé la déconnexion.");
+          return;
+        }
+
         sessionAdminActive = false;
         sessionStorage.removeItem("admin_auth_bunec");
         sessionStorage.removeItem("bunec_csrf_token");
@@ -3441,14 +3478,12 @@
           if (res.ok) {
             const data = await res.json();
             dossiersHistoriqueAdmin = data.dossiers || [];
+          } else {
+            dossiersHistoriqueAdmin = [];
           }
         } catch (err) {
-          console.warn("Fallback local dossiers admin");
-        }
-
-        // Si le backend n'a pas répondu, alimentation par la base nationale
-        if (!dossiersHistoriqueAdmin || dossiersHistoriqueAdmin.length === 0) {
-          dossiersHistoriqueAdmin = baseDossiersNationale;
+          console.warn("Historique administrateur indisponible:", err.message);
+          dossiersHistoriqueAdmin = [];
         }
 
         // Calcul des KPIs
@@ -3592,33 +3627,33 @@
                 return `
               <tr class="hover:bg-slate-50 transition border-b border-slate-100 text-xs">
                 <td class="py-3 px-4">
-                  <span class="font-mono font-black text-slate-900 block text-xs">${item.numeroDeclaration}</span>
-                  <span class="font-mono text-[10px] text-emerald-800 font-bold block">${item.identifiantBUNEC}</span>
+                  <span class="font-mono font-black text-slate-900 block text-xs">${escapeHtml(item.numeroDeclaration)}</span>
+                  <span class="font-mono text-[10px] text-emerald-800 font-bold block">${escapeHtml(item.identifiantBUNEC)}</span>
                   <span class="text-[10px] text-slate-400">Le ${dateFmt}</span>
                 </td>
                 <td class="py-3 px-4">
                   <div class="space-y-1">
                     <div>${typeBadge}</div>
-                    <span class="font-black text-slate-900 block text-xs">${item.titreActe}</span>
+                    <span class="font-black text-slate-900 block text-xs">${escapeHtml(item.titreActe)}</span>
                   </div>
                 </td>
                 <td class="py-3 px-4">
-                  <span class="font-black text-slate-900 block">${item.titulaire}</span>
-                  <span class="text-[11px] text-slate-500 block">Demandeur : ${item.demandeur.nomComplet}</span>
-                  <span class="text-[10px] font-mono text-emerald-700 font-bold">📱 +237 ${item.demandeur.telephone}</span>
+                  <span class="font-black text-slate-900 block">${escapeHtml(item.titulaire)}</span>
+                  <span class="text-[11px] text-slate-500 block">Demandeur : ${escapeHtml(item.demandeur.nomComplet)}</span>
+                  <span class="text-[10px] font-mono text-emerald-700 font-bold">📱 +237 ${escapeHtml(item.demandeur.telephone)}</span>
                 </td>
                 <td class="py-3 px-4">
                   <div class="space-y-0.5">
-                    <span class="font-black text-purple-900 block text-xs">Région : ${item.provenance.regionNom} (${item.provenance.departement})</span>
-                    <span class="text-[11px] font-semibold text-slate-700 block">${item.provenance.communeNom}</span>
-                    <span class="text-[10px] text-slate-500 block italic">${item.provenance.centreEtatCivil}</span>
+                    <span class="font-black text-purple-900 block text-xs">Région : ${escapeHtml(item.provenance.regionNom)} (${escapeHtml(item.provenance.departement)})</span>
+                    <span class="text-[11px] font-semibold text-slate-700 block">${escapeHtml(item.provenance.communeNom)}</span>
+                    <span class="text-[10px] text-slate-500 block italic">${escapeHtml(item.provenance.centreEtatCivil)}</span>
                   </div>
                 </td>
                 <td class="py-3 px-4">
                   <div class="space-y-0.5">
-                    <span class="font-bold text-slate-800 block text-[11px]">📍 ${item.provenance.canalDepot}</span>
-                    <span class="font-mono text-[10px] text-slate-500 block">IP : ${item.provenance.adresseIp}</span>
-                    <span class="text-[10px] text-slate-400 block">${item.provenance.operateur}</span>
+                    <span class="font-bold text-slate-800 block text-[11px]">📍 ${escapeHtml(item.provenance.canalDepot)}</span>
+                    <span class="font-mono text-[10px] text-slate-500 block">IP : ${escapeHtml(item.provenance.adresseIp)}</span>
+                    <span class="text-[10px] text-slate-400 block">${escapeHtml(item.provenance.operateur)}</span>
                   </div>
                 </td>
                 <td class="py-3 px-4">
@@ -3635,7 +3670,7 @@
                   <div class="flex items-center justify-center gap-1.5 flex-wrap">
                     <button
                       type="button"
-                      onclick="basculerStatutDossierAdmin('${item.id}')"
+                      onclick="basculerStatutDossierAdmin('${safeInlineId(item.id)}')"
                       title="Changer le statut administratif et débloquer/verrouiller le BAT"
                       class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] border border-slate-300 transition active:scale-95 cursor-pointer"
                     >
@@ -3643,7 +3678,7 @@
                     </button>
                     <button
                       type="button"
-                      onclick="ouvrirBATAdmin('${item.typeActe}', '${item.id}')"
+                      onclick="ouvrirBATAdmin('${safeInlineId(item.typeActe)}', '${safeInlineId(item.id)}')"
                       title="Consulter le Bon à Tirer (BAT) correspondant"
                       class="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold text-[10px] border border-emerald-300 transition active:scale-95 cursor-pointer"
                     >
@@ -3665,11 +3700,11 @@
             .map((item) => {
               return `
             <tr class="text-[9px]">
-              <td class="border border-slate-400 p-1 font-mono font-bold">${item.numeroDeclaration}<br><span class="text-[8px] text-emerald-800">${item.identifiantBUNEC}</span></td>
-              <td class="border border-slate-400 p-1 font-bold">${item.titreActe}</td>
-              <td class="border border-slate-400 p-1"><strong>${item.titulaire}</strong><br>Req: ${item.demandeur.nomComplet} (Tel: ${item.demandeur.telephone})</td>
-              <td class="border border-slate-400 p-1 font-semibold">${item.provenance.regionNom} - ${item.provenance.departement}<br>${item.provenance.communeNom}</td>
-              <td class="border border-slate-400 p-1 font-mono text-[8px]">${item.provenance.canalDepot}<br>IP: ${item.provenance.adresseIp}</td>
+              <td class="border border-slate-400 p-1 font-mono font-bold">${escapeHtml(item.numeroDeclaration)}<br><span class="text-[8px] text-emerald-800">${escapeHtml(item.identifiantBUNEC)}</span></td>
+              <td class="border border-slate-400 p-1 font-bold">${escapeHtml(item.titreActe)}</td>
+              <td class="border border-slate-400 p-1"><strong>${escapeHtml(item.titulaire)}</strong><br>Req: ${escapeHtml(item.demandeur.nomComplet)} (Tel: ${escapeHtml(item.demandeur.telephone)})</td>
+              <td class="border border-slate-400 p-1 font-semibold">${escapeHtml(item.provenance.regionNom)} - ${escapeHtml(item.provenance.departement)}<br>${escapeHtml(item.provenance.communeNom)}</td>
+              <td class="border border-slate-400 p-1 font-mono text-[8px]">${escapeHtml(item.provenance.canalDepot)}<br>IP: ${escapeHtml(item.provenance.adresseIp)}</td>
               <td class="border border-slate-400 p-1 font-bold ${item.statut === "PRETE_RETRAIT" ? "text-emerald-900" : "text-amber-900"}">${item.statut === "PRETE_RETRAIT" ? "PRÊT (BAT DÉBLOQUÉ)" : item.statut}</td>
             </tr>
           `;
@@ -3687,7 +3722,7 @@
           item.statut === "PRETE_RETRAIT" ? "INSTRUCTION" : "PRETE_RETRAIT";
 
         try {
-          await fetch(`/api/v1/admin/dossiers/${dossierId}/statut`, {
+          const response = await fetch(`/api/v1/admin/dossiers/${encodeURIComponent(dossierId)}/statut`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -3695,14 +3730,19 @@
             },
             body: JSON.stringify({ nouveauStatut }),
           });
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.error || "La mise à jour du statut a échoué.");
+          }
         } catch (err) {
-          // Fallback local
+          alert(err.message || "Le service de mise à jour est indisponible.");
+          return;
         }
 
         item.statut = nouveauStatut;
         if (nouveauStatut === "PRETE_RETRAIT") {
           item.etapeCourante = 4;
-          item.notificationRetraitEnvoyee = true;
+          item.notificationRetraitEnvoyee = false;
           item.libelleStatut =
             "Disponible au guichet — Prêt pour délivrance (BAT Émis)";
         } else {
@@ -3717,10 +3757,14 @@
         const toast = document.createElement("div");
         toast.className =
           "fixed bottom-5 right-5 z-50 p-4 rounded-2xl shadow-2xl border text-xs bg-slate-900 text-white flex items-center gap-3 border-emerald-400";
-        toast.innerHTML =
+        const statusIcon = document.createElement("span");
+        statusIcon.textContent = nouveauStatut === "PRETE_RETRAIT" ? "✓" : "⏳";
+        const statusMessage = document.createElement("span");
+        statusMessage.textContent =
           nouveauStatut === "PRETE_RETRAIT"
-            ? `<span>✓</span><span>Dossier <strong>${item.numeroDeclaration}</strong> passé à <strong>PRÊT POUR RETRAIT</strong> : Bon à Tirer débloqué pour le citoyen et notification envoyée !</span>`
-            : `<span>⏳</span><span>Dossier <strong>${item.numeroDeclaration}</strong> remis en <strong>INSTRUCTION</strong> (BAT verrouillé).</span>`;
+            ? `Dossier ${item.numeroDeclaration} passé à PRÊT POUR RETRAIT. Aucune notification n’a été envoyée automatiquement.`
+            : `Dossier ${item.numeroDeclaration} remis en INSTRUCTION (BAT verrouillé).`;
+        toast.append(statusIcon, statusMessage);
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 4000);
       }

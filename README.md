@@ -9,13 +9,13 @@ Express (`backend/`) et un frontend Vite (`frontend/`).
 ```text
 backend/                   API Express + PostgreSQL
   server.js                Point d’entrée (charge backend/.env)
-  app.js                   Middleware Express et montage des routes API
-  routes/api.js            Routes API
-  services/                Accès aux données métier
-  middleware/security.js   Sessions, CSRF, limitation et en-têtes
-  data/store.js            Données en mémoire (référentiel, démonstration)
-  database/pool.js         Pool PostgreSQL
-   database/schema.sql      Schéma PostgreSQL
+  src/app.js               Configuration Express et montage des routes
+  src/routes/              Routes de l’API MVC
+  src/controllers/         Contrôleurs HTTP
+  src/services/            Services métier
+  src/models/              Accès aux données
+  src/middlewares/         Authentification, validation et sécurité
+  database/schema.sql      Schéma PostgreSQL
   database/seeds/          Référentiels territoriaux
   .env.example             Variables d’environnement du backend
 frontend/                  Interface web (Vite)
@@ -86,10 +86,10 @@ développement Vite.
 ## Recherche de dossier
 
 Le formulaire envoie une seule valeur d’identification avec la région, la
-commune et le type d’acte sélectionnés. Le backend compare exactement le
-numéro de récépissé, l’identifiant BUNEC, le téléphone, l’email ou le nom du
-demandeur, au moyen de paramètres SQL. Les correspondances partielles et les
-dossiers de démonstration ne sont pas utilisés comme solution de repli.
+commune et le type d’acte sélectionnés. Le backend compare exactement le numéro de récépissé ou l’identifiant BUNEC,
+au moyen de paramètres SQL. Les noms, téléphones et e-mails ne sont plus des
+clés de recherche ; la réponse publique masque les identifiants personnels et
+les documents civils.
 
 Sans base configurée ou joignable, l’API de suivi répond `503`. Si aucun dossier
 ne correspond aux critères exacts, elle répond `404`.
@@ -115,7 +115,8 @@ ne correspond aux critères exacts, elle répond `404`.
 
    Le hash est produit par `crypto.pbkdf2Sync(motDePasse, sel, 220000, 32,
    "sha256").toString("hex")`. En production, le serveur refuse de démarrer si
-   le secret de session, le hash admin ou son sel manque.
+   le secret de session, le hash admin ou son sel manque. Aucun mot de passe
+   administrateur par défaut n’est accepté, même en développement.
 3. Initialiser le schéma et les données de référence avec `psql`, comme dans
    la section d’installation, puis charger les centres et dossiers réels.
 4. Démarrer l’API : `cd backend && npm start`.
@@ -130,7 +131,7 @@ ne correspond aux critères exacts, elle répond `404`.
 
 ## État des données
 
-Le suivi citoyen utilise PostgreSQL. Les listes de bans et l’historique admin
-présents dans cette version restent des jeux de démonstration en mémoire; leurs
-routes ne sont pas encore persistées dans PostgreSQL. Ne pas les considérer
-comme des données de production.
+En développement, les jeux de démonstration restent disponibles sans base.
+En production, les dossiers, les bans et les changements de statut exigent
+PostgreSQL et ne basculent pas silencieusement sur des données en mémoire.
+L’API secondaire `projet-gestion-henri` a été retirée.

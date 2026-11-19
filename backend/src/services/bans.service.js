@@ -1,4 +1,12 @@
 const BanModel = require("../models/ban.model");
+const { stripSensitiveText } = require("../middlewares/validation.middleware");
+
+const legalQualities = new Set([
+  "CONJOINT_NON_DIVORCE",
+  "ASCENDANT",
+  "TUTEUR",
+  "MINISTERE_PUBLIC",
+]);
 
 class BansService {
   static async getAllBans(filters = {}) {
@@ -39,13 +47,64 @@ class BansService {
       throw error;
     }
 
-    if (!payload.opposantNom || !payload.opposantCni || !payload.motifLegalOpposition) {
+    const requiredFields = [
+      "opposantNom",
+      "opposantPrenom",
+      "opposantCni",
+      "opposantTelephone",
+      "opposantAdresse",
+      "motifLegalOpposition",
+    ];
+    if (
+      requiredFields.some(
+        (field) => typeof payload[field] !== "string" || !payload[field].trim(),
+      )
+    ) {
       const error = new Error("Les informations de l’opposant et le motif légal sont obligatoires.");
       error.statusCode = 400;
       throw error;
     }
 
-    return BanModel.addOpposition(banId, payload);
+    if (!legalQualities.has(payload.opposantQualiteLegale)) {
+      const error = new Error("La qualité légale de l’opposant est invalide.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const clean = {
+      opposantNom: stripSensitiveText(payload.opposantNom),
+      opposantPrenom: stripSensitiveText(payload.opposantPrenom),
+      opposantQualiteLegale: payload.opposantQualiteLegale,
+      opposantCni: stripSensitiveText(payload.opposantCni),
+      opposantTelephone: stripSensitiveText(payload.opposantTelephone),
+      opposantEmail: stripSensitiveText(payload.opposantEmail || ""),
+      opposantAdresse: stripSensitiveText(payload.opposantAdresse),
+      motifLegalOpposition: stripSensitiveText(payload.motifLegalOpposition),
+    };
+    if (
+      clean.opposantNom.length > 150 ||
+      clean.opposantPrenom.length > 150 ||
+      clean.opposantCni.length > 50 ||
+      clean.opposantTelephone.length > 30 ||
+      clean.opposantEmail.length > 150 ||
+      clean.opposantAdresse.length > 255 ||
+      clean.motifLegalOpposition.length < 10
+    ) {
+      const error = new Error("Certaines informations sont trop longues ou incomplètes.");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (
+      !/^[0-9+(). -]{8,30}$/.test(clean.opposantTelephone) ||
+      (clean.opposantEmail &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean.opposantEmail))
+    ) {
+      const error = new Error("Le téléphone ou l’adresse électronique est invalide.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return BanModel.addOpposition(banId, clean);
   }
 }
 

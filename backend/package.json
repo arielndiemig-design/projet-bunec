@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "test": "node test-api.js"
+    "test": "node ../frontend/test-api.js"
   },
   "dependencies": {
     "compression": "^1.7.4",

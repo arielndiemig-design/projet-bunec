@@ -186,6 +186,15 @@ CREATE TABLE IF NOT EXISTS historique_statuts (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS admin_sessions (
+    id UUID PRIMARY KEY,
+    username VARCHAR(100) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at
+    ON admin_sessions (expires_at);
+
 -- ----------------------------------------------------------------------------
 -- 5. MODULE DES PUBLICATIONS LÉGALES DE BANS DE MARIAGE
 -- ----------------------------------------------------------------------------

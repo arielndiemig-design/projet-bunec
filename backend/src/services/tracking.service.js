@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const DossierModel = require("../models/dossier.model");
 const { otpVerificationStore, normalizeEmail, dossiersHistoriqueDatabase, getDossierNotificationEmail } = require("../data/store");
 
@@ -9,7 +10,35 @@ class TrackingService {
       error.statusCode = 404;
       throw error;
     }
-    return dossier;
+    return {
+      ...dossier,
+      demandeur: {
+        ...dossier.demandeur,
+        nomComplet: "Identité protégée",
+        telephone: maskPhone(dossier.demandeur?.telephone),
+        cni: maskIdentifier(dossier.demandeur?.cni),
+        email: maskEmail(dossier.demandeur?.email),
+      },
+      titulaire: "Identité protégée",
+      motifRejet: null,
+      donneesActeCivil: null,
+      bat: {
+        ...(dossier.bat || {}),
+        available: false,
+        document: null,
+      },
+      cycleDeVie: dossier.cycleDeVie
+        ? {
+            ...dossier.cycleDeVie,
+            motifBlocage: null,
+            etapes: (dossier.cycleDeVie.etapes || []).map((etape) => ({
+              ...etape,
+              acteur: "Service d’état civil",
+              description: "Progression enregistrée par le centre d’état civil.",
+            })),
+          }
+        : dossier.cycleDeVie,
+    };
   }
 
   static async verifyOtp({ dossierId, otp, email }) {
@@ -17,18 +46,15 @@ class TrackingService {
     const code = String(otp || "").trim();
     const emailTarget = normalizeEmail(email || "");
 
-    let verificationEntry = null;
-    if (dId) {
-      verificationEntry = otpVerificationStore.get(dId);
-    }
+    const verificationEntry = dId ? otpVerificationStore.get(dId) : null;
 
-    if (!verificationEntry && emailTarget) {
-      verificationEntry = Array.from(otpVerificationStore.values()).find(
-        (entry) => entry.email === emailTarget,
-      );
-    }
-
-    if (!verificationEntry) {
+    if (
+      !dId ||
+      !code ||
+      !verificationEntry ||
+      verificationEntry.dossierId !== dId ||
+      (emailTarget && verificationEntry.email !== emailTarget)
+    ) {
       const error = new Error("Code OTP invalide ou expiré.");
       error.statusCode = 401;
       throw error;
@@ -41,16 +67,23 @@ class TrackingService {
       throw error;
     }
 
-    if (verificationEntry.otp !== code) {
+    verificationEntry.attempts = (verificationEntry.attempts || 0) + 1;
+    const expectedCode = Buffer.from(String(verificationEntry.otp || ""));
+    const providedCode = Buffer.from(code);
+    if (
+      expectedCode.length !== providedCode.length ||
+      !crypto.timingSafeEqual(expectedCode, providedCode)
+    ) {
+      if (verificationEntry.attempts >= 5) {
+        otpVerificationStore.delete(verificationEntry.dossierId);
+      }
       const error = new Error("Code OTP invalide ou expiré.");
       error.statusCode = 401;
       throw error;
     }
 
     const dossier = dossiersHistoriqueDatabase.find(
-      (item) =>
-        item.id === verificationEntry.dossierId ||
-        item.identifiantBUNEC === dId,
+      (item) => item.id === verificationEntry.dossierId,
     );
 
     if (!dossier) {
@@ -147,6 +180,27 @@ class TrackingService {
       derniereMiseAJour: new Date().toISOString(),
     };
   }
+}
+
+function maskPhone(value) {
+  const phone = String(value || "");
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 4) return phone ? "••••" : null;
+  return `${digits.slice(0, 2)}••••${digits.slice(-2)}`;
+}
+
+function maskIdentifier(value) {
+  const identifier = String(value || "");
+  if (!identifier) return null;
+  if (identifier.length <= 4) return "••••";
+  return `${identifier.slice(0, 2)}••••${identifier.slice(-2)}`;
+}
+
+function maskEmail(value) {
+  const email = String(value || "");
+  const [name, domain] = email.split("@");
+  if (!name || !domain) return null;
+  return `${name.slice(0, 1)}•••@${domain}`;
 }
 
 module.exports = TrackingService;

@@ -6,7 +6,13 @@ const { ensureCsrf } = require("../middlewares/csrf.middleware");
 const router = express.Router();
 
 router.post("/auth/admin", AdminController.login);
-router.post("/auth/logout", AdminController.logout);
+router.post(
+  "/auth/logout",
+  requireSession,
+  requireAdmin,
+  ensureCsrf,
+  AdminController.logout,
+);
 
 router.get("/admin/historique", requireSession, requireAdmin, AdminController.getHistorique);
 router.post(
